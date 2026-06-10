@@ -1,0 +1,347 @@
+def predict_top5(audio_path):
+    x, mfcc = audio_to_mfcc(audio_path)
+    x = np.expand_dims(x, axis=0)
+    probs = model.predict(x, verbose=0)[0]   # (34,)
+
+    top5_idx = np.argsort(probs)[::-1][:5]
+    top5 = [(int(i), float(probs[i])) for i in top5_idx]
+
+    spec_img = make_spectrogram_image(mfcc)
+    return top5, spec_img
+
+# ─────────────────────────────────────────────────────────────
+# 5) 두 화면(업로드 / 결과) 전환 핸들러
+# ─────────────────────────────────────────────────────────────
+def go_analyze(audio_path):
+    """업로드 화면 → 결과 화면."""
+    if audio_path is None:
+        gr.Warning("먼저 고래 소리 파일을 업로드하거나 녹음해주세요 🐋")
+        return (
+            gr.update(visible=True),   # upload_screen
+            gr.update(visible=False),  # result_screen
+            *[gr.update() for _ in range(13)],  # 5 ranks × (label, bar, pct) + spec + summary - filled below
+        )
+
+    try:
+        top5, spec_img = predict_top5(audio_path)
+    except Exception as e:
+        gr.Warning(f"오디오 처리 중 오류: {e}")
+        return (gr.update(visible=True), gr.update(visible=False),
+                *[gr.update() for _ in range(13)])
+
+    # 각 순위별 UI 업데이트 값 만들기
+    medals = ["🥇", "🥈", "🥉", "④", "⑤"]
+    rank_html_updates = []
+    for rank in range(5):
+        idx, prob = top5[rank]
+        pct = prob * 100
+        bar_pct = max(2.0, pct)  # 너무 작으면 안 보여서 최소 2%
+        html = f"""
+        <div class="rank-card rank-{rank+1}">
+          <div class="rank-medal">{medals[rank]}</div>
+          <div class="rank-body">
+            <div class="rank-line">
+              <span class="rank-num">{rank+1}위</span>
+              <span class="rank-name">{LABELS_EN[idx]}</span>
+              <span class="rank-pct">{pct:.2f}%</span>
+            </div>
+            <div class="rank-name-ko">{LABELS_KO[idx]}</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:{bar_pct:.2f}%"></div>
+            </div>
+          </div>
+        </div>
+        """
+        rank_html_updates.append(html)
+
+    # 1등 강조용 큰 텍스트
+    top_idx, top_prob = top5[0]
+    hero_html = f"""
+    <div class="hero-result">
+      <div class="hero-label">가장 닮은 고래</div>
+      <div class="hero-name">🐋 {LABELS_EN[top_idx]}</div>
+      <div class="hero-name-ko">{LABELS_KO[top_idx]}</div>
+      <div class="hero-pct">{top_prob*100:.2f}%</div>
+    </div>
+    """
+
+    return (
+        gr.update(visible=False),  # upload_screen 숨김
+        gr.update(visible=True),   # result_screen 표시
+        hero_html,                 # hero_box
+        rank_html_updates[0],      # rank1_html
+        rank_html_updates[1],      # rank2_html
+        rank_html_updates[2],      # rank3_html
+        rank_html_updates[3],      # rank4_html
+        rank_html_updates[4],      # rank5_html
+        spec_img,                  # spectrogram
+    )
+
+def go_back():
+    """결과 화면 → 업로드 화면."""
+    return gr.update(visible=True), gr.update(visible=False)
+
+# ─────────────────────────────────────────────────────────────
+# 6) UI (Gradio Blocks)
+# ─────────────────────────────────────────────────────────────
+CUSTOM_CSS = """
+:root {
+  --deep-1: #050d1a;
+  --deep-2: #0a1a2e;
+  --deep-3: #102844;
+  --accent: #4ec5d8;
+  --accent-2: #f5c451;
+  --text-1: #eef6fb;
+  --text-2: #9ec5dd;
+}
+
+.gradio-container, .gradio-container * {
+  font-family: 'Pretendard','Inter',-apple-system,sans-serif !important;
+}
+
+.gradio-container {
+  background:
+    radial-gradient(1100px 600px at 15% -10%, #1b4368 0%, transparent 55%),
+    radial-gradient(900px 500px at 95% 110%, #102844 0%, transparent 60%),
+    var(--deep-1) !important;
+  color: var(--text-1) !important;
+  min-height: 100vh;
+}
+
+/* ─── 공통 ─── */
+.screen-wrap { max-width: 880px; margin: 0 auto; padding: 32px 16px 48px; }
+.brand {
+  text-align: center; margin-bottom: 28px;
+}
+.brand-title {
+  font-size: 2rem; font-weight: 800; letter-spacing: -0.02em;
+  background: linear-gradient(90deg, #fff 0%, var(--accent) 55%, var(--accent-2) 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  margin: 0;
+}
+.brand-sub {
+  color: var(--text-2); font-size: 0.92rem; margin-top: 6px;
+  letter-spacing: 0.02em;
+}
+
+/* ─── 화면 1: 업로드 ─── */
+.upload-card {
+  background: linear-gradient(180deg, rgba(20,40,68,0.7), rgba(10,26,46,0.7));
+  border: 1px solid rgba(78,197,216,0.18);
+  border-radius: 22px;
+  padding: 36px 32px;
+  box-shadow: 0 24px 60px -20px rgba(0,0,0,0.5);
+  backdrop-filter: blur(6px);
+}
+.upload-title {
+  text-align: center; font-size: 1.4rem; font-weight: 700;
+  color: var(--text-1); margin: 0 0 6px;
+}
+.upload-desc {
+  text-align: center; color: var(--text-2); font-size: 0.92rem;
+  margin-bottom: 26px;
+}
+#analyze-btn {
+  background: linear-gradient(135deg, #4ec5d8, #2d8aa0) !important;
+  color: white !important; border: none !important;
+  font-weight: 700 !important; font-size: 1.05rem !important;
+  padding: 14px 28px !important; border-radius: 14px !important;
+  box-shadow: 0 12px 30px -8px rgba(78,197,216,0.55) !important;
+  transition: transform .15s ease, box-shadow .15s ease !important;
+}
+#analyze-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 40px -8px rgba(78,197,216,0.7) !important;
+}
+
+/* ─── 화면 2: 결과 ─── */
+.hero-result {
+  text-align: center;
+  padding: 28px 20px 24px;
+  background: linear-gradient(180deg, rgba(78,197,216,0.10), rgba(245,196,81,0.04));
+  border: 1px solid rgba(78,197,216,0.25);
+  border-radius: 22px;
+  margin-bottom: 22px;
+}
+.hero-label {
+  color: var(--text-2); font-size: 0.85rem; letter-spacing: 0.18em;
+  text-transform: uppercase; margin-bottom: 8px;
+}
+.hero-name {
+  font-size: 1.85rem; font-weight: 800;
+  color: var(--text-1); letter-spacing: -0.01em;
+  margin: 4px 0 2px;
+}
+.hero-name-ko {
+  font-size: 1.05rem; color: var(--accent); margin-bottom: 12px;
+}
+.hero-pct {
+  font-size: 2.6rem; font-weight: 900;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+
+.rank-list { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.rank-card {
+  display: flex; align-items: center; gap: 14px;
+  background: rgba(16,40,68,0.55);
+  border: 1px solid rgba(78,197,216,0.12);
+  border-radius: 14px;
+  padding: 12px 16px;
+}
+.rank-card.rank-1 { border-color: rgba(245,196,81,0.45); background: rgba(245,196,81,0.06); }
+.rank-card.rank-2 { border-color: rgba(199,210,219,0.30); }
+.rank-card.rank-3 { border-color: rgba(205,127, 50,0.35); }
+.rank-medal {
+  font-size: 1.6rem; width: 38px; text-align: center; flex-shrink: 0;
+}
+.rank-body { flex: 1; min-width: 0; }
+.rank-line {
+  display: flex; align-items: baseline; gap: 10px;
+  margin-bottom: 4px;
+}
+.rank-num {
+  color: var(--text-2); font-size: 0.78rem; font-weight: 700;
+  letter-spacing: 0.05em; flex-shrink: 0;
+}
+.rank-name {
+  color: var(--text-1); font-weight: 700; font-size: 1rem;
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rank-name-ko {
+  color: var(--text-2); font-size: 0.82rem; margin-bottom: 6px;
+}
+.rank-pct {
+  color: var(--accent); font-weight: 800; font-size: 1.05rem;
+  flex-shrink: 0;
+}
+.rank-1 .rank-pct { color: var(--accent-2); }
+.bar-track {
+  height: 6px; width: 100%;
+  background: rgba(255,255,255,0.06);
+  border-radius: 999px; overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #2d8aa0);
+  border-radius: 999px;
+  transition: width 0.6s ease-out;
+}
+.rank-1 .bar-fill {
+  background: linear-gradient(90deg, var(--accent-2), #d99e2b);
+}
+
+#back-btn {
+  background: transparent !important;
+  color: var(--text-2) !important;
+  border: 1px solid rgba(78,197,216,0.35) !important;
+  font-weight: 600 !important;
+  border-radius: 12px !important;
+  padding: 10px 22px !important;
+}
+#back-btn:hover {
+  background: rgba(78,197,216,0.08) !important;
+  color: var(--text-1) !important;
+}
+
+.spec-block {
+  margin-top: 20px;
+  background: rgba(10,26,46,0.6);
+  border: 1px solid rgba(78,197,216,0.15);
+  border-radius: 14px;
+  padding: 14px;
+}
+.spec-title {
+  color: var(--text-2); font-size: 0.78rem;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.footnote {
+  text-align: center; color: var(--text-2); opacity: 0.6;
+  font-size: 0.78rem; margin-top: 28px;
+}
+"""
+
+with gr.Blocks(css=CUSTOM_CSS, title="🐋 고래 종 분류기",
+               theme=gr.themes.Base(primary_hue="cyan", neutral_hue="slate")) as demo:
+
+    # 공통 헤더
+    gr.HTML("""
+    <div class="screen-wrap" style="padding-bottom:0">
+      <div class="brand">
+        <h1 class="brand-title">🐋  고래 종 분류기</h1>
+        <p class="brand-sub">Whale Species Classifier · CNN-based acoustic identification</p>
+      </div>
+    </div>
+    """)
+
+    # ───────── 화면 1: 업로드 ─────────
+    with gr.Column(visible=True, elem_classes="screen-wrap") as upload_screen:
+        gr.HTML('<div class="upload-card">'
+                '<div class="upload-title">🎧 고래 소리를 업로드하세요</div>'
+                '<div class="upload-desc">파일을 끌어다 놓거나 마이크로 녹음하세요 · '
+                'WAV, MP3, FLAC 등 지원 · 1~5초 길이의 휘슬·콜·클릭음 권장</div>'
+                '</div>')
+        audio_in = gr.Audio(
+            sources=["upload", "microphone"],
+            type="filepath",
+            label="",
+            show_label=False,
+        )
+        with gr.Row():
+            gr.HTML("<div style='flex:1'></div>")
+            analyze_btn = gr.Button("🔍  분류 시작하기", elem_id="analyze-btn", scale=0)
+            gr.HTML("<div style='flex:1'></div>")
+
+    # ───────── 화면 2: 결과 ─────────
+    with gr.Column(visible=False, elem_classes="screen-wrap") as result_screen:
+        hero_box = gr.HTML()
+
+        gr.HTML('<div style="color:var(--text-2);font-size:0.85rem;letter-spacing:0.18em;'
+                'text-transform:uppercase;margin:18px 0 10px">🏆 유사도 순위 Top 5</div>'
+                '<div class="rank-list">')
+        rank1_html = gr.HTML()
+        rank2_html = gr.HTML()
+        rank3_html = gr.HTML()
+        rank4_html = gr.HTML()
+        rank5_html = gr.HTML()
+        gr.HTML("</div>")
+
+        gr.HTML('<div class="spec-block">'
+                '<div class="spec-title">🎼 입력 오디오의 MFCC 특징</div>')
+        spec_img_out = gr.Image(show_label=False, container=False, height=240)
+        gr.HTML("</div>")
+
+        with gr.Row():
+            gr.HTML("<div style='flex:1'></div>")
+            back_btn = gr.Button("↺  다른 소리 다시 분석하기", elem_id="back-btn", scale=0)
+            gr.HTML("<div style='flex:1'></div>")
+
+    # 공통 푸터
+    gr.HTML("""
+    <div class="footnote screen-wrap">
+      Reference · Suarez D. (2023) <i>Whale Detection through Sound Analysis with CNN</i>, Kaggle ·
+      윤영글 외 (2024) <i>CNN 모델을 이용한 수중음향 자료의 돌고래 휘슬음 자동 분류 연구</i>, 한국수산과학회지.
+    </div>
+    """)
+
+    # 이벤트 연결
+    analyze_btn.click(
+        go_analyze,
+        inputs=[audio_in],
+        outputs=[
+            upload_screen, result_screen,
+            hero_box,
+            rank1_html, rank2_html, rank3_html, rank4_html, rank5_html,
+            spec_img_out,
+        ],
+    )
+    back_btn.click(
+        go_back,
+        inputs=None,
+        outputs=[upload_screen, result_screen],
+    )
+
+if __name__ == "__main__":
+    demo.launch(server_name="0.0.0.0", share=False)
