@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🐋 고래 종 분류기</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"
+  />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- 헤더 -->
+  <header class="brand screen-wrap">
+    <h1 class="brand-title">🐋&nbsp; 고래 종 분류기</h1>
+    <p class="brand-sub">Whale Species Classifier · CNN-based acoustic identification</p>
+  </header>
+
+  <!-- ───────── 화면 1: 업로드 ───────── -->
+  <section id="upload-screen" class="screen-wrap">
+    <div class="upload-card">
+      <div class="upload-title">🎧 고래 소리를 업로드하세요</div>
+      <div class="upload-desc">
+        파일을 끌어다 놓거나 클릭해서 선택하세요 · WAV · MP3 · FLAC 지원<br />
+        1~5초 길이의 휘슬 · 콜 · 클릭음 권장
+      </div>
+
+      <label id="dropzone" for="audio-input" tabindex="0">
+        <div class="dz-icon">📁</div>
+        <div class="dz-text" id="dz-text">여기에 오디오 파일을 놓거나 클릭</div>
+        <audio id="preview" controls hidden></audio>
+      </label>
+      <input type="file" id="audio-input" accept="audio/*" hidden />
+    </div>
+
+    <div class="center-row">
+      <button id="analyze-btn" disabled>🔍&nbsp; 분류 시작하기</button>
+    </div>
+  </section>
+
+  <!-- ───────── 화면 2: 결과 ───────── -->
+  <section id="result-screen" class="screen-wrap" hidden>
+    <div id="hero-box"></div>
+    <div id="rank-header"></div>
+    <div class="rank-list" id="rank-list"></div>
+
+    <div class="center-row">
+      <button id="back-btn">↺&nbsp; 다른 소리 다시 분석하기</button>
+    </div>
+  </section>
+
+  <!-- 푸터 -->
+  <footer class="footnote screen-wrap">
+    Reference · Suarez D. (2023) <i>Whale Detection through Sound Analysis with CNN</i>, Kaggle ·
+    윤영글 외 (2024) <i>CNN 모델을 이용한 수중음향 자료의 돌고래 휘슬음 자동 분류 연구</i>, 한국수산과학회지.
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>
